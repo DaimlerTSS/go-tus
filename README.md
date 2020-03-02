@@ -21,8 +21,12 @@ func main() {
 
     defer f.Close()
 
+    // create the tus client config.
+    config := DefaultConfig()
+    config.ChecksumAlgorithm = SHA1
+
     // create the tus client.
-    client, _ := tus.NewClient("https://tus.example.org/files", nil)
+    client, _ := tus.NewClient("https://tus.example.org/files", config)
 
     // create an upload from a file.
     upload, _ := tus.NewUploadFromFile(f)
