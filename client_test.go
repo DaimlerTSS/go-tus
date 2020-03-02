@@ -197,6 +197,58 @@ func (s *UploadTestSuite) TestOverridePatchMethod() {
 	s.EqualValues(10, fi.Size)
 }
 
+func (s *UploadTestSuite) TestSetSha256ChecksumAlgorithm() {
+	client, err := NewClient(s.url, nil)
+	s.Nil(err)
+
+	client.Config.ChecksumAlgorithm = SHA256
+
+	upload := NewUploadFromBytes([]byte("1234567890"))
+	s.Nil(err)
+
+	uploader, err := client.CreateUpload(upload)
+	s.Nil(err)
+	s.NotNil(uploader)
+
+	err = uploader.Upload()
+	s.Nil(err)
+
+	//TODO: currently we cannot evaluate the checksum on server-side since tusd doesn't support this extension yet
+	getUpload, err := s.store.GetUpload(nil, uploadIdFromUrl(uploader.url))
+	s.Nil(err)
+
+	fi, err := getUpload.GetInfo(nil)
+	s.Nil(err)
+
+	s.EqualValues(10, fi.Size)
+}
+
+func (s *UploadTestSuite) TestSetSha1ChecksumAlgorithm() {
+	client, err := NewClient(s.url, nil)
+	s.Nil(err)
+
+	client.Config.ChecksumAlgorithm = SHA1
+
+	upload := NewUploadFromBytes([]byte("1234567890"))
+	s.Nil(err)
+
+	uploader, err := client.CreateUpload(upload)
+	s.Nil(err)
+	s.NotNil(uploader)
+
+	err = uploader.Upload()
+	s.Nil(err)
+
+	//TODO: currently we cannot evaluate the checksum on server-side since tusd doesn't support this extension yet
+	getUpload, err := s.store.GetUpload(nil, uploadIdFromUrl(uploader.url))
+	s.Nil(err)
+
+	fi, err := getUpload.GetInfo(nil)
+	s.Nil(err)
+
+	s.EqualValues(10, fi.Size)
+}
+
 func (s *UploadTestSuite) TestConcurrentUploads() {
 	var wg sync.WaitGroup
 

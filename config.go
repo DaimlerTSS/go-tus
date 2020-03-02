@@ -19,6 +19,8 @@ type Config struct {
 	Header http.Header
 	// HTTP Client
 	HttpClient *http.Client
+	// Set checksum algorithm used in all requests.
+	ChecksumAlgorithm ChecksumAlgorithm
 }
 
 // DefaultConfig return the default Client configuration.
@@ -45,3 +47,14 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+
+type ChecksumAlgorithm string
+
+func (c ChecksumAlgorithm) String() string {
+	return string(c)
+}
+
+const (
+	SHA1   ChecksumAlgorithm = "sha1"
+	SHA256 ChecksumAlgorithm = "sha256"
+)

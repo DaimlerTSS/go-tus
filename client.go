@@ -1,6 +1,10 @@
 package tus
 
 import (
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -187,6 +191,11 @@ func (c *Client) uploadChunck(url string, body io.Reader, size int64, offset int
 		req.Header.Set("X-HTTP-Method-Override", "PATCH")
 	}
 
+	err = c.checksumChunk(body, req)
+	if err != nil {
+		return -1, err
+	}
+
 	res, err := c.Do(req)
 
 	if err != nil {
@@ -210,6 +219,32 @@ func (c *Client) uploadChunck(url string, body io.Reader, size int64, offset int
 	default:
 		return -1, newClientError(res)
 	}
+}
+
+func (c *Client) checksumChunk(body io.Reader, req *http.Request) error {
+	if len(c.Config.ChecksumAlgorithm) == 0 {
+		return nil
+	}
+
+	switch c.Config.ChecksumAlgorithm {
+	case SHA1:
+		h := sha1.New()
+		if _, err := io.Copy(h, body); err != nil {
+			return err
+		}
+		req.Header.Set("Upload-Checksum", SHA1.String()+" "+base64.StdEncoding.EncodeToString(h.Sum(nil)))
+		break
+	case SHA256:
+		h := sha256.New()
+		if _, err := io.Copy(h, body); err != nil {
+			return err
+		}
+		req.Header.Set("Upload-Checksum", SHA256.String()+" "+base64.StdEncoding.EncodeToString(h.Sum(nil)))
+		break
+	default:
+		return fmt.Errorf("unsupported checksum algorithm '%s'", c.Config.ChecksumAlgorithm)
+	}
+	return nil
 }
 
 func (c *Client) getUploadOffset(url string) (int64, error) {
