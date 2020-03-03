@@ -1,11 +1,11 @@
 package tus
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	netUrl "net/url"
@@ -168,7 +168,7 @@ func (c *Client) CreateOrResumeUpload(u *Upload) (*Uploader, error) {
 	return nil, err
 }
 
-func (c *Client) uploadChunck(url string, body io.Reader, size int64, offset int64) (int64, error) {
+func (c *Client) uploadChunck(url string, body []byte, size int64, offset int64) (int64, error) {
 	var method string
 
 	if !c.Config.OverridePatchMethod {
@@ -177,8 +177,7 @@ func (c *Client) uploadChunck(url string, body io.Reader, size int64, offset int
 		method = "POST"
 	}
 
-	req, err := http.NewRequest(method, url, body)
-
+	req, err := http.NewRequest(method, url, bytes.NewReader(body))
 	if err != nil {
 		return -1, err
 	}
@@ -191,8 +190,7 @@ func (c *Client) uploadChunck(url string, body io.Reader, size int64, offset int
 		req.Header.Set("X-HTTP-Method-Override", "PATCH")
 	}
 
-	err = c.checksumChunk(body, req)
-	if err != nil {
+	if err = c.checksumChunk(body, req); err != nil {
 		return -1, err
 	}
 
@@ -221,7 +219,7 @@ func (c *Client) uploadChunck(url string, body io.Reader, size int64, offset int
 	}
 }
 
-func (c *Client) checksumChunk(body io.Reader, req *http.Request) error {
+func (c *Client) checksumChunk(body []byte, req *http.Request) error {
 	if len(c.Config.ChecksumAlgorithm) == 0 {
 		return nil
 	}
@@ -229,17 +227,11 @@ func (c *Client) checksumChunk(body io.Reader, req *http.Request) error {
 	switch c.Config.ChecksumAlgorithm {
 	case SHA1:
 		h := sha1.New()
-		if _, err := io.Copy(h, body); err != nil {
-			return err
-		}
-		req.Header.Set("Upload-Checksum", SHA1.String()+" "+base64.StdEncoding.EncodeToString(h.Sum(nil)))
+		req.Header.Set("Upload-Checksum", SHA1.String()+" "+base64.StdEncoding.EncodeToString(h.Sum(body)))
 		break
 	case SHA256:
 		h := sha256.New()
-		if _, err := io.Copy(h, body); err != nil {
-			return err
-		}
-		req.Header.Set("Upload-Checksum", SHA256.String()+" "+base64.StdEncoding.EncodeToString(h.Sum(nil)))
+		req.Header.Set("Upload-Checksum", SHA256.String()+" "+base64.StdEncoding.EncodeToString(h.Sum(body)))
 		break
 	default:
 		return fmt.Errorf("unsupported checksum algorithm '%s'", c.Config.ChecksumAlgorithm)

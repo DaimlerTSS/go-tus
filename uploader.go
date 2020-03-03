@@ -1,9 +1,5 @@
 package tus
 
-import (
-	"bytes"
-)
-
 type Uploader struct {
 	client     *Client
 	url        string
@@ -69,9 +65,7 @@ func (u *Uploader) UploadChunck() error {
 		return err
 	}
 
-	body := bytes.NewBuffer(data[:size])
-
-	newOffset, err := u.client.uploadChunck(u.url, body, int64(size), u.offset)
+	newOffset, err := u.client.uploadChunck(u.url, data[:size], int64(size), u.offset)
 
 	if err != nil {
 		return err
