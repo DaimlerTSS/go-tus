@@ -7,7 +7,7 @@ MAKEFLAGS += --no-builtin-rules
 
 .DEFAULT_GOAL := help
 
-TARGET=go-tuts
+TARGET=tuscmd
 
 GRAY=\033[1;90m
 MAGENTA=\033[1;35m
@@ -18,6 +18,7 @@ build: clean fmt lint
 	@echo -e "${GRAY}>> ⚙️\t${MAGENTA}Building...${RESET_COLOR}"
 	@go mod tidy -v
 	@go build -v -trimpath .
+	@cd cmd && go build -v -trimpath -o "${TARGET}" .
 .PHONY: build
 
 ## test: execute tests for all packages
@@ -41,7 +42,7 @@ lint:
 ## clean: clean the binary
 clean:
 	@echo -e "${GRAY}>> 🧹\t${MAGENTA}Cleaning...${RESET_COLOR}"
-	@if [ -f ${TARGET} ] ; then rm -v ${TARGET} ; fi
+	@if [ -f cmd/${TARGET} ] ; then rm -v cmd/${TARGET} ; fi
 .PHONY: clean
 
 ## mod-download: download modules to local cache
