@@ -10,8 +10,10 @@ type Config struct {
 	ChunkSize int64
 	// Resume enables resumable upload.
 	Resume bool
-	// OverridePatchMethod allow to by pass proxies sendind a POST request instead of PATCH.
+	// OverridePatchMethod allow to by pass proxies sending a POST request instead of PATCH.
 	OverridePatchMethod bool
+	// OverrideCreatePostMethod allow sending a PATCH request instead of POST for a create request.
+	OverrideCreatePostMethod bool
 	// Store map an upload's fingerprint with the corresponding upload URL.
 	// If Resume is true the Store is required.
 	Store Store
@@ -26,12 +28,13 @@ type Config struct {
 // DefaultConfig return the default Client configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		ChunkSize:           2 * 1024 * 1024,
-		Resume:              false,
-		OverridePatchMethod: false,
-		Store:               nil,
-		Header:              make(http.Header),
-		HttpClient:          nil,
+		ChunkSize:                2 * 1024 * 1024,
+		Resume:                   false,
+		OverrideCreatePostMethod: false,
+		OverridePatchMethod:      false,
+		Store:                    nil,
+		Header:                   make(http.Header),
+		HttpClient:               nil,
 	}
 }
 
@@ -55,6 +58,8 @@ func (c ChecksumAlgorithm) String() string {
 }
 
 const (
+	EDLS   ChecksumAlgorithm = "edls"
+	MD5    ChecksumAlgorithm = "md5"
 	SHA1   ChecksumAlgorithm = "sha1"
 	SHA256 ChecksumAlgorithm = "sha256"
 )

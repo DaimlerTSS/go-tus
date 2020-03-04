@@ -2,9 +2,11 @@ package tus
 
 import (
 	"bytes"
+	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -65,6 +67,94 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.client.Do(req)
 }
 
+// CreateUploadWithContent creates a new upload in the server including parts of the upload in the initial Creation request.
+func (c *Client) CreateUploadWithContent(u *Upload) (*Uploader, error) {
+	if u == nil {
+		return nil, ErrNilUpload
+	}
+
+	if c.Config.Resume && len(u.Fingerprint) == 0 {
+		return nil, ErrFingerprintNotSet
+	}
+
+	data := make([]byte, c.Config.ChunkSize)
+
+	_, err := u.stream.Seek(u.offset, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	size, err := u.stream.Read(data)
+	if err != nil {
+		return nil, err
+	}
+
+	method := "POST"
+	if c.Config.OverrideCreatePostMethod {
+		method = "PATCH"
+	}
+
+	req, err := http.NewRequest(method, c.Url, bytes.NewReader(data[:size]))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/offset+octet-stream")
+	req.Header.Set("Content-Length", strconv.Itoa(size))
+	req.Header.Set("Upload-Length", strconv.FormatInt(u.size, 10))
+	req.Header.Set("Upload-Offset", strconv.FormatInt(u.offset, 10))
+	req.Header.Set("Upload-Metadata", u.EncodedMetadata())
+
+	if err = c.checksumChunk(data[:size], req); err != nil {
+		return nil, err
+	}
+
+	res, err := c.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	switch res.StatusCode {
+	case 201, 204:
+		url := res.Header.Get("Location")
+		if len(url) == 0 {
+			url = c.Url
+		} else {
+			baseUrl, err := netUrl.Parse(c.Url)
+			if err != nil {
+				return nil, ErrUrlNotRecognized
+			}
+
+			newUrl, err := netUrl.Parse(url)
+			if err != nil {
+				return nil, ErrUrlNotRecognized
+			}
+			if newUrl.Scheme == "" {
+				newUrl.Scheme = baseUrl.Scheme
+				url = newUrl.String()
+			}
+		}
+
+		if c.Config.Resume {
+			c.Config.Store.Set(u.Fingerprint, url)
+		}
+
+		newOffset, err := strconv.ParseInt(res.Header.Get("Upload-Offset"), 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		return NewUploader(c, url, u, newOffset), nil
+	case 412:
+		return nil, ErrVersionMismatch
+	case 413:
+		return nil, ErrLargeUpload
+	default:
+		return nil, newClientError(res)
+	}
+}
+
 // CreateUpload creates a new upload in the server.
 func (c *Client) CreateUpload(u *Upload) (*Uploader, error) {
 	if u == nil {
@@ -75,12 +165,17 @@ func (c *Client) CreateUpload(u *Upload) (*Uploader, error) {
 		return nil, ErrFingerprintNotSet
 	}
 
-	req, err := http.NewRequest("POST", c.Url, nil)
+	method := "POST"
+	if c.Config.OverrideCreatePostMethod {
+		method = "PATCH"
+	}
 
+	req, err := http.NewRequest(method, c.Url, nil)
 	if err != nil {
 		return nil, err
 	}
 
+	req.Header.Set("Content-Type", "application/offset+octet-stream")
 	req.Header.Set("Content-Length", "0")
 	req.Header.Set("Upload-Length", strconv.FormatInt(u.size, 10))
 	req.Header.Set("Upload-Metadata", u.EncodedMetadata())
@@ -93,21 +188,24 @@ func (c *Client) CreateUpload(u *Upload) (*Uploader, error) {
 	defer res.Body.Close()
 
 	switch res.StatusCode {
-	case 201:
+	case 201, 204:
 		url := res.Header.Get("Location")
+		if len(url) == 0 {
+			url = c.Url
+		} else {
+			baseUrl, err := netUrl.Parse(c.Url)
+			if err != nil {
+				return nil, ErrUrlNotRecognized
+			}
 
-		baseUrl, err := netUrl.Parse(c.Url)
-		if err != nil {
-			return nil, ErrUrlNotRecognized
-		}
-
-		newUrl, err := netUrl.Parse(url)
-		if err != nil {
-			return nil, ErrUrlNotRecognized
-		}
-		if newUrl.Scheme == "" {
-			newUrl.Scheme = baseUrl.Scheme
-			url = newUrl.String()
+			newUrl, err := netUrl.Parse(url)
+			if err != nil {
+				return nil, ErrUrlNotRecognized
+			}
+			if newUrl.Scheme == "" {
+				newUrl.Scheme = baseUrl.Scheme
+				url = newUrl.String()
+			}
 		}
 
 		if c.Config.Resume {
@@ -168,12 +266,26 @@ func (c *Client) CreateOrResumeUpload(u *Upload) (*Uploader, error) {
 	return nil, err
 }
 
-func (c *Client) uploadChunck(url string, body []byte, size int64, offset int64) (int64, error) {
-	var method string
+// CreateWithContentOrResumeUpload resumes the upload if already created or creates a new upload with content in the server.
+func (c *Client) CreateWithContentOrResumeUpload(u *Upload) (*Uploader, error) {
+	if u == nil {
+		return nil, ErrNilUpload
+	}
 
-	if !c.Config.OverridePatchMethod {
-		method = "PATCH"
-	} else {
+	uploader, err := c.ResumeUpload(u)
+
+	if err == nil {
+		return uploader, err
+	} else if (err == ErrResumeNotEnabled) || (err == ErrUploadNotFound) {
+		return c.CreateUploadWithContent(u)
+	}
+
+	return nil, err
+}
+
+func (c *Client) uploadChunck(url string, body []byte, size int64, offset int64) (int64, error) {
+	method := "PATCH"
+	if c.Config.OverridePatchMethod {
 		method = "POST"
 	}
 
@@ -225,13 +337,22 @@ func (c *Client) checksumChunk(body []byte, req *http.Request) error {
 	}
 
 	switch c.Config.ChecksumAlgorithm {
+	case EDLS: //EDLS doesn't properly implement the tus spec
+		checksum := sha1.Sum(body)
+		checksumHexStr := hex.EncodeToString(checksum[:])
+		req.Header.Set("Upload-Checksum", SHA1.String()+" "+base64.StdEncoding.EncodeToString([]byte(checksumHexStr)))
+		break
 	case SHA1:
-		h := sha1.New()
-		req.Header.Set("Upload-Checksum", SHA1.String()+" "+base64.StdEncoding.EncodeToString(h.Sum(body)))
+		checksum := sha1.Sum(body)
+		req.Header.Set("Upload-Checksum", SHA1.String()+" "+base64.StdEncoding.EncodeToString(checksum[:]))
 		break
 	case SHA256:
-		h := sha256.New()
-		req.Header.Set("Upload-Checksum", SHA256.String()+" "+base64.StdEncoding.EncodeToString(h.Sum(body)))
+		checksum := sha256.Sum256(body)
+		req.Header.Set("Upload-Checksum", SHA256.String()+" "+base64.StdEncoding.EncodeToString(checksum[:]))
+		break
+	case MD5:
+		checksum := md5.Sum(body)
+		req.Header.Set("Upload-Checksum", MD5.String()+" "+base64.StdEncoding.EncodeToString(checksum[:]))
 		break
 	default:
 		return fmt.Errorf("unsupported checksum algorithm '%s'", c.Config.ChecksumAlgorithm)
@@ -254,7 +375,7 @@ func (c *Client) getUploadOffset(url string) (int64, error) {
 	defer res.Body.Close()
 
 	switch res.StatusCode {
-	case 200:
+	case 200, 204:
 		i, err := strconv.ParseInt(res.Header.Get("Upload-Offset"), 10, 64)
 
 		if err == nil {

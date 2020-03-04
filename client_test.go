@@ -197,6 +197,20 @@ func (s *UploadTestSuite) TestOverridePatchMethod() {
 	s.EqualValues(10, fi.Size)
 }
 
+func (s *UploadTestSuite) TestChecksumChunk() {
+	client, err := NewClient(s.url, nil)
+	s.Nil(err)
+
+	client.Config.ChecksumAlgorithm = SHA1
+
+	req, _ := http.NewRequest("POST", "https://example.com", nil)
+	s.Nil(err)
+	err = client.checksumChunk([]byte("hello world"), req)
+	s.Nil(err)
+
+	s.EqualValues("sha1 Kq5sNclPz7QV2+lfQIuc6R7oRu0=", req.Header.Get("Upload-Checksum"))
+}
+
 func (s *UploadTestSuite) TestSetSha256ChecksumAlgorithm() {
 	client, err := NewClient(s.url, nil)
 	s.Nil(err)
