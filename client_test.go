@@ -197,7 +197,7 @@ func (s *UploadTestSuite) TestOverridePatchMethod() {
 	s.EqualValues(10, fi.Size)
 }
 
-func (s *UploadTestSuite) TestChecksumChunk() {
+func (s *UploadTestSuite) TestSha1ChecksumChunk() {
 	client, err := NewClient(s.url, nil)
 	s.Nil(err)
 
@@ -209,6 +209,75 @@ func (s *UploadTestSuite) TestChecksumChunk() {
 	s.Nil(err)
 
 	s.EqualValues("sha1 Kq5sNclPz7QV2+lfQIuc6R7oRu0=", req.Header.Get("Upload-Checksum"))
+}
+
+func (s *UploadTestSuite) TestSha1HexChecksumChunk() {
+	client, err := NewClient(s.url, nil)
+	s.Nil(err)
+
+	client.Config.ChecksumAlgorithm = SHA1_HEX
+
+	req, _ := http.NewRequest("POST", "https://example.com", nil)
+	s.Nil(err)
+	err = client.checksumChunk([]byte("hello world"), req)
+	s.Nil(err)
+	s.EqualValues("sha1 MmFhZTZjMzVjOTRmY2ZiNDE1ZGJlOTVmNDA4YjljZTkxZWU4NDZlZA==", req.Header.Get("Upload-Checksum"))
+}
+
+func (s *UploadTestSuite) TestSha256ChecksumChunk() {
+	client, err := NewClient(s.url, nil)
+	s.Nil(err)
+
+	client.Config.ChecksumAlgorithm = SHA256
+
+	req, _ := http.NewRequest("POST", "https://example.com", nil)
+	s.Nil(err)
+	err = client.checksumChunk([]byte("hello world"), req)
+	s.Nil(err)
+
+	s.EqualValues("sha256 uU0nuZNNPgilLlLX2n2r+sSE7+N6U4DukIj3rOLvzek=", req.Header.Get("Upload-Checksum"))
+}
+
+func (s *UploadTestSuite) TestSha256HexChecksumChunk() {
+	client, err := NewClient(s.url, nil)
+	s.Nil(err)
+
+	client.Config.ChecksumAlgorithm = SHA256_HEX
+
+	req, _ := http.NewRequest("POST", "https://example.com", nil)
+	s.Nil(err)
+	err = client.checksumChunk([]byte("hello world"), req)
+	s.Nil(err)
+
+	s.EqualValues("sha256 Yjk0ZDI3Yjk5MzRkM2UwOGE1MmU1MmQ3ZGE3ZGFiZmFjNDg0ZWZlMzdhNTM4MGVlOTA4OGY3YWNlMmVmY2RlOQ==", req.Header.Get("Upload-Checksum"))
+}
+
+func (s *UploadTestSuite) TestMd5ChecksumChunk() {
+	client, err := NewClient(s.url, nil)
+	s.Nil(err)
+
+	client.Config.ChecksumAlgorithm = MD5
+
+	req, _ := http.NewRequest("POST", "https://example.com", nil)
+	s.Nil(err)
+	err = client.checksumChunk([]byte("hello world"), req)
+	s.Nil(err)
+
+	s.EqualValues("md5 XrY7u+Ae7tCTyyK7j1rNww==", req.Header.Get("Upload-Checksum"))
+}
+
+func (s *UploadTestSuite) TestMd5HexChecksumChunk() {
+	client, err := NewClient(s.url, nil)
+	s.Nil(err)
+
+	client.Config.ChecksumAlgorithm = MD5_HEX
+
+	req, _ := http.NewRequest("POST", "https://example.com", nil)
+	s.Nil(err)
+	err = client.checksumChunk([]byte("hello world"), req)
+	s.Nil(err)
+
+	s.EqualValues("md5 NWViNjNiYmJlMDFlZWVkMDkzY2IyMmJiOGY1YWNkYzM=", req.Header.Get("Upload-Checksum"))
 }
 
 func (s *UploadTestSuite) TestSetSha256ChecksumAlgorithm() {
