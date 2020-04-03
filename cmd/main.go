@@ -52,12 +52,10 @@ func main() {
 	uploader.NotifyUploadProgress(c)
 	go func() {
 		for {
-			select {
-			case res := <-c:
-				fmt.Printf("Progress: %3d%% offset: %d %v\n", res.Progress(), res.Offset(), res.Metadata[metaDataKeyFileName])
-				if res.Finished() {
-					return
-				}
+			res := <-c
+			fmt.Printf("Progress: %3d%% offset: %d %v\n", res.Progress(), res.Offset(), res.Metadata[metaDataKeyFileName])
+			if res.Finished() {
+				return
 			}
 		}
 	}()
